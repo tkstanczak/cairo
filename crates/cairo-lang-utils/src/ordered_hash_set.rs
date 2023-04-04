@@ -93,10 +93,19 @@ impl<Key: Hash + Eq> OrderedHashSet<Key> {
     pub fn is_superset<S2: BuildHasher>(&self, other: &OrderedHashSet<Key, S2>) -> bool {
         self.0.is_superset(&other.0)
     }
+
+    /// Same as union, but also verifies that the input sets are disjoint.
+    pub fn disjoint_union<'a>(&'a self, other: &'a OrderedHashSet<Key>) -> OrderedHashSet<Key>
+    where
+        Key: Clone,
+    {
+        assert!(self.0.intersection(&other.0).next().is_none(), "Input sets must be disjoint");
+        Self(self.union(&other).map(|elm| elm.clone()).collect())
+    }
 }
 
 impl<Key: Hash + Eq, S: BuildHasher> OrderedHashSet<Key, S> {
-    /// Return an iterator over all values that are in `self` or `other`.
+    /// Return an iterator over all values that are either in `self` or `other`.
     ///
     /// Values from `self` are produced in their original order, followed by
     /// values that are unique to `other` in their original order.

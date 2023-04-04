@@ -60,7 +60,7 @@ impl std::ops::Sub for PreCost {
 }
 
 /// The cost of executing a libfunc for a specific output branch.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BranchCost {
     /// The cost of the statement is independent on other statements.
     Regular { const_cost: ConstCost, pre_cost: PreCost },

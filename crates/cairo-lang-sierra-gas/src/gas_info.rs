@@ -8,7 +8,7 @@ use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 use itertools::{chain, Itertools};
 
 /// Gas information for a Sierra program.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct GasInfo {
     /// The values of variables at matching libfuncs at given statements indices.
     pub variable_values: OrderedHashMap<(StatementIdx, CostTokenType), i64>,
@@ -57,6 +57,11 @@ impl GasInfo {
     }
 
     pub fn assert_eq(&self, other: &GasInfo) {
+        for key in chain!(self.function_costs.keys(), other.function_costs.keys()) {
+            let self_val = self.function_costs.get(key);
+            let other_val = other.function_costs.get(key);
+            assert!(self_val == other_val, "Difference in {key:?}: {self_val:?} != {other_val:?}",);
+        }
         for (key, val) in sub_maps(self.variable_values.clone(), other.variable_values.clone()) {
             assert!(
                 val == 0,
@@ -64,11 +69,6 @@ impl GasInfo {
                 self.variable_values.get(&key),
                 other.variable_values.get(&key)
             );
-        }
-        for key in chain!(self.function_costs.keys(), other.function_costs.keys()) {
-            let self_val = self.function_costs.get(key);
-            let other_val = other.function_costs.get(key);
-            assert!(self_val == other_val, "Difference in {key:?}: {self_val:?} != {other_val:?}",);
         }
     }
 }
