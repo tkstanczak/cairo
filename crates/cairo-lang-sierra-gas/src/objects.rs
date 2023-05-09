@@ -41,7 +41,7 @@ impl std::ops::Add for ConstCost {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PreCost(pub OrderedHashMap<CostTokenType, i32>);
 
-/// Adds two [ConstCost] instances.
+/// Adds two [PreCost] instances.
 impl std::ops::Add for PreCost {
     type Output = Self;
 
@@ -50,12 +50,32 @@ impl std::ops::Add for PreCost {
     }
 }
 
-/// Subtracts two [ConstCost] instances.
+/// Subtracts two [PreCost] instances.
 impl std::ops::Sub for PreCost {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
         PreCost(sub_maps(self.0, rhs.0))
+    }
+}
+
+/// Implements Ord for [PreCost].
+impl Ord for PreCost {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        for token in CostTokenType::iter_precost() {
+            let res = self.0.get(token).unwrap_or(&0).cmp(other.0.get(token).unwrap_or(&0));
+            if res != std::cmp::Ordering::Equal {
+                return res;
+            }
+        }
+        return std::cmp::Ordering::Equal;
+    }
+}
+
+/// Implements PartialOrd for [PreCost].
+impl PartialOrd for PreCost {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

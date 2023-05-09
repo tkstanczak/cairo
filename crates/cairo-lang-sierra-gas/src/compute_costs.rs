@@ -15,6 +15,7 @@ use cairo_lang_utils::iterators::zip_eq3;
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 use cairo_lang_utils::ordered_hash_set::OrderedHashSet;
 use cairo_lang_utils::unordered_hash_map::UnorderedHashMap;
+use cairo_lang_utils::unordered_hash_set::UnorderedHashSet;
 use itertools::zip_eq;
 
 use crate::gas_info::GasInfo;
@@ -29,7 +30,7 @@ type VariableValues = OrderedHashMap<(StatementIdx, CostTokenType), i64>;
 /// A trait for the cost type (either [PreCost] for pre-cost computation, or `i32` for the post-cost
 /// computation).
 pub trait CostTypeTrait:
-    std::fmt::Debug + Default + Clone + Eq + Add<Output = Self> + Sub<Output = Self>
+    std::fmt::Debug + Default + Clone + Eq + Add<Output = Self> + Sub<Output = Self> + PartialOrd
 {
     fn max(values: impl Iterator<Item = Self>) -> Self;
 }
@@ -62,16 +63,24 @@ pub fn compute_costs<
     program: &Program,
     get_cost_fn: &dyn Fn(&ConcreteLibfuncId) -> Vec<BranchCost>,
     specific_cost_context: &SpecificCostContext,
+    enforced_costs: &OrderedHashMap<StatementIdx, CostType>,
 ) -> GasInfo {
     let mut context = CostContext {
         program,
-        costs: UnorderedHashMap::default(),
         get_cost_fn,
+        enforced_costs,
+        costs: UnorderedHashMap::default(),
         cost_vars_values: UnorderedHashMap::default(),
+        function_entry_points: program.funcs.iter().map(|func| func.entry_point).collect(),
     };
 
     for i in 0..program.statements.len() {
         context.prepare_wallet_at(&StatementIdx(i), specific_cost_context);
+    }
+
+    // Set all unassigned variables to 0.
+    for i in 0..program.statements.len() {
+        context.wallet_at(&StatementIdx(i)).assign_all_variables(&mut context.cost_vars_values);
     }
 
     let mut variable_values = VariableValues::default();
@@ -260,6 +269,28 @@ pub struct WalletInfo<CostType: CostTypeTrait> {
 }
 
 impl<CostType: CostTypeTrait> WalletInfo<CostType> {
+    fn substitute_assigned_variables(
+        self,
+        cost_vars_values: &mut UnorderedHashMap<StatementIdx, CostVar<CostType>>,
+    ) -> Self {
+        let WalletInfo { value: mut wallet_info_value, cost_vars } = self;
+
+        let cost_vars = cost_vars
+            .into_iter()
+            .filter(|cost_var| {
+                if let Some(CostVar(value)) = cost_vars_values.get(cost_var) {
+                    // This variable was already assigned.
+                    wallet_info_value = wallet_info_value.clone() + value.clone();
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        WalletInfo { value: wallet_info_value, cost_vars }
+    }
+
     fn merge(
         branches: Vec<Self>,
         cost_vars_values: &mut UnorderedHashMap<StatementIdx, CostVar<CostType>>,
@@ -270,27 +301,19 @@ impl<CostType: CostTypeTrait> WalletInfo<CostType> {
         // A map from unassigned variables (StatementIdx) to the number of branches that use it.
         let mut var_count: OrderedHashMap<StatementIdx, usize> = Default::default();
 
-        // Go over the branches, handle assigned variables, and count unassigned variables.
+        // Substitute assigned variables in the inputs.
         let branches: Vec<Self> = branches
             .into_iter()
-            .map(|WalletInfo { value: mut wallet_info_value, cost_vars }| {
-                let cost_vars = cost_vars
-                    .into_iter()
-                    .filter(|cost_var| {
-                        if let Some(CostVar(value)) = cost_vars_values.get(cost_var) {
-                            // This variable was already assigned.
-                            wallet_info_value = wallet_info_value.clone() + value.clone();
-                            false
-                        } else {
-                            *var_count.entry(*cost_var).or_insert(0) += 1;
-                            true
-                        }
-                    })
-                    .collect();
-                WalletInfo { value: wallet_info_value, cost_vars }
-            })
+            .map(|wallet_info| wallet_info.substitute_assigned_variables(cost_vars_values))
             .collect();
         println!("branches: {branches:?}");
+
+        // Count the number of unassigned variables.
+        for wallet_info in &branches {
+            for cost_var in &wallet_info.cost_vars {
+                *var_count.entry(*cost_var).or_insert(0) += 1;
+            }
+        }
 
         for wallet_info in &branches {
             let mut assigned_diff = false;
@@ -342,10 +365,72 @@ impl<CostType: CostTypeTrait> WalletInfo<CostType> {
         })
     }
 
+    fn assign_all_variables(
+        self,
+        cost_vars_values: &mut UnorderedHashMap<StatementIdx, CostVar<CostType>>,
+    ) -> Self {
+        let WalletInfo { value: mut wallet_info_value, cost_vars } = self;
+
+        for cost_var in cost_vars {
+            if let Some(CostVar(value)) = cost_vars_values.get(&cost_var) {
+                // This variable was already assigned.
+                wallet_info_value = wallet_info_value.clone() + value.clone();
+            } else {
+                // Unassigned variable - set it to zero.
+                cost_vars_values.insert(cost_var, CostVar(Default::default()));
+            }
+        }
+
+        WalletInfo { value: wallet_info_value, cost_vars: Default::default() }
+    }
+
     /// Returns the value, assuming there are no used cost variables (panics otherwise).
     fn get_pure_value(self) -> CostType {
         assert!(self.cost_vars.is_empty(), "Encountered unexpected cost variables.");
         self.value
+    }
+
+    fn enforce_cost(
+        self,
+        enforced_cost: &CostType,
+        cost_vars_values: &mut UnorderedHashMap<StatementIdx, CostVar<CostType>>,
+    ) -> Self {
+        let WalletInfo { value: mut wallet_info_value, cost_vars } = self;
+
+        // Substitute assigned variables.
+        // TODO(lior): Consider sharing code with the code above.
+        let cost_vars: OrderedHashSet<_> = cost_vars
+            .into_iter()
+            .filter(|cost_var| {
+                if let Some(CostVar(value)) = cost_vars_values.get(cost_var) {
+                    // This variable was already assigned.
+                    wallet_info_value = wallet_info_value.clone() + value.clone();
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        assert!(
+            &wallet_info_value <= enforced_cost,
+            "Cannot enforce cost of statement. Current cost ({wallet_info_value:?}) is bigger \
+             than enforced cost ({enforced_cost:?})."
+        );
+
+        assert_eq!(
+            cost_vars.len(),
+            1,
+            "Expected exactly one cost variable, found {}.",
+            cost_vars.len()
+        );
+
+        let unassigned_cost_var = cost_vars.iter().next().unwrap().clone();
+
+        cost_vars_values
+            .insert(unassigned_cost_var, CostVar(enforced_cost.clone() - wallet_info_value));
+
+        WalletInfo { value: enforced_cost.clone(), cost_vars: Default::default() }
     }
 }
 
@@ -389,11 +474,13 @@ struct CostContext<'a, CostType: CostTypeTrait> {
     program: &'a Program,
     /// A callback function returning the cost of a libfunc for every output branch.
     get_cost_fn: &'a dyn Fn(&ConcreteLibfuncId) -> Vec<BranchCost>,
+    enforced_costs: &'a OrderedHashMap<StatementIdx, CostType>,
     /// The cost before executing a Sierra statement.
     costs: UnorderedHashMap<StatementIdx, CostComputationStatus<CostType>>,
     /// A map from a statement to the [CostVar] variable it is responsible of, if exists.
     /// See [CostVar].
     cost_vars_values: UnorderedHashMap<StatementIdx, CostVar<CostType>>,
+    function_entry_points: UnorderedHashSet<StatementIdx>,
 }
 impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
     /// Returns the cost of a libfunc for every output branch.
@@ -485,7 +572,7 @@ impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
         idx: &StatementIdx,
         specific_cost_context: &SpecificCostContext,
     ) -> WalletInfo<CostType> {
-        match &self.program.get_statement(idx).unwrap() {
+        let mut res = match &self.program.get_statement(idx).unwrap() {
             Statement::Return(_) => Default::default(),
             Statement::Invocation(invocation) => {
                 let libfunc_cost: Vec<BranchCost> = self.get_cost(&invocation.libfunc_id);
@@ -507,9 +594,28 @@ impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
 
                 // The wallet value at the beginning of the statement is the maximal value
                 // required by all the branches.
-                WalletInfo::merge(branch_requirements, &mut self.cost_vars_values)
+                let res = WalletInfo::merge(branch_requirements, &mut self.cost_vars_values);
+
+                if invocation.branches.len() > 1 {
+                    // If there are multiple branches and no variables, add a variable.
+                    res.assign_all_variables(&mut self.cost_vars_values)
+                        + WalletInfo {
+                            value: CostType::default(),
+                            cost_vars: [*idx].into_iter().collect(),
+                        }
+                } else {
+                    res
+                }
             }
+        };
+
+        if let Some(enforced_cost) = self.enforced_costs.get(idx) {
+            res = res.enforce_cost(enforced_cost, &mut self.cost_vars_values);
+        } else if self.function_entry_points.contains(idx) {
+            res = res.assign_all_variables(&mut self.cost_vars_values);
         }
+
+        res
     }
 }
 

@@ -62,14 +62,18 @@ impl GasInfo {
             let other_val = other.function_costs.get(key);
             assert!(self_val == other_val, "Difference in {key:?}: {self_val:?} != {other_val:?}",);
         }
+        let mut fail = false;
         for (key, val) in sub_maps(self.variable_values.clone(), other.variable_values.clone()) {
-            assert!(
-                val == 0,
-                "Difference in {key:?}: {:?} != {:?}",
-                self.variable_values.get(&key),
-                other.variable_values.get(&key)
-            );
+            if val != 0 {
+                println!(
+                    "Difference in {key:?}: {:?} != {:?}",
+                    self.variable_values.get(&key),
+                    other.variable_values.get(&key)
+                );
+                fail = true;
+            }
         }
+        assert!(!fail, "Comparison failed.");
     }
 }
 
