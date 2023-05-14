@@ -681,13 +681,17 @@ dependencies = [
 name = "cairo-lang-sierra-gas"
 version = "1.0.0-rc0"
 dependencies = [
+ "cairo-lang-compiler",
  "cairo-lang-eq-solver",
+ "cairo-lang-semantic",
  "cairo-lang-sierra",
+ "cairo-lang-sierra-generator",
  "cairo-lang-test-utils",
  "cairo-lang-utils",
  "env_logger",
  "indoc",
  "itertools",
+ "once_cell",
  "pretty_assertions",
  "test-case",
  "test-log",

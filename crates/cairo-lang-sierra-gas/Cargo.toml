@@ -14,9 +14,13 @@ itertools.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+cairo-lang-semantic = { path = "../cairo-lang-semantic", features = ["testing"] }
+cairo-lang-compiler = { path = "../cairo-lang-compiler" }
+once_cell.workspace = true
 cairo-lang-test-utils = { path = "../cairo-lang-test-utils", version = "1.0.0-rc0" }
 env_logger.workspace = true
 indoc.workspace = true
 pretty_assertions.workspace = true
 test-case.workspace = true
 test-log.workspace = true
+cairo-lang-sierra-generator = { path = "../cairo-lang-sierra-generator", version = "1.0.0-rc0" }

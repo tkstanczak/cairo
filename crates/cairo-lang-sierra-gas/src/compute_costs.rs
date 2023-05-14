@@ -30,18 +30,35 @@ type VariableValues = OrderedHashMap<(StatementIdx, CostTokenType), i64>;
 /// A trait for the cost type (either [PreCost] for pre-cost computation, or `i32` for the post-cost
 /// computation).
 pub trait CostTypeTrait:
-    std::fmt::Debug + Default + Clone + Eq + Add<Output = Self> + Sub<Output = Self> + PartialOrd
+    std::fmt::Debug + Default + Clone + Eq + Add<Output = Self> + Sub<Output = Self>
 {
+    fn min2(value1: &Self, value2: &Self) -> Self;
     fn max(values: impl Iterator<Item = Self>) -> Self;
 }
 
 impl CostTypeTrait for i32 {
+    fn min2(value1: &Self, value2: &Self) -> Self {
+        *std::cmp::min(value1, value2)
+    }
     fn max(values: impl Iterator<Item = Self>) -> Self {
         values.max().unwrap_or_default()
     }
 }
 
 impl CostTypeTrait for PreCost {
+    fn min2(value1: &Self, value2: &Self) -> Self {
+        // The tokens that should appear are the tokens that appear in both parameters.
+        PreCost(
+            value1
+                .0
+                .iter()
+                .filter_map(|(token_type, val)| {
+                    Some((*token_type, *std::cmp::min(val, value2.0.get(token_type)?)))
+                })
+                .collect(),
+        )
+    }
+
     fn max(values: impl Iterator<Item = Self>) -> Self {
         let mut res = Self::default();
         for value in values {
@@ -69,9 +86,11 @@ pub fn compute_costs<
         program,
         get_cost_fn,
         enforced_costs,
-        costs: UnorderedHashMap::default(),
-        cost_vars_values: UnorderedHashMap::default(),
+        costs: Default::default(),
+        topological_order: Default::default(),
+        cost_vars_values: Default::default(),
         function_entry_points: program.funcs.iter().map(|func| func.entry_point).collect(),
+        excess: Default::default(),
     };
 
     for i in 0..program.statements.len() {
@@ -79,9 +98,12 @@ pub fn compute_costs<
     }
 
     // Set all unassigned variables to 0.
-    for i in 0..program.statements.len() {
-        context.wallet_at(&StatementIdx(i)).assign_all_variables(&mut context.cost_vars_values);
-    }
+    // for i in 0..program.statements.len() {
+    //     context.wallet_at(&StatementIdx(i)).assign_all_variables(&mut context.cost_vars_values);
+    // }
+
+    // Compute the excess cost at each statement.
+    context.compute_excess(specific_cost_context);
 
     let mut variable_values = VariableValues::default();
     for i in 0..program.statements.len() {
@@ -294,9 +316,11 @@ impl<CostType: CostTypeTrait> WalletInfo<CostType> {
     fn merge(
         branches: Vec<Self>,
         cost_vars_values: &mut UnorderedHashMap<StatementIdx, CostVar<CostType>>,
+        excess: CostType,
     ) -> Self {
         let n_branches = branches.len();
-        let max_value = CostType::max(branches.iter().map(|wallet_info| wallet_info.value.clone()));
+        let max_value =
+            CostType::max(branches.iter().map(|wallet_info| wallet_info.value.clone())) + excess;
 
         // A map from unassigned variables (StatementIdx) to the number of branches that use it.
         let mut var_count: OrderedHashMap<StatementIdx, usize> = Default::default();
@@ -413,7 +437,8 @@ impl<CostType: CostTypeTrait> WalletInfo<CostType> {
             .collect();
 
         assert!(
-            &wallet_info_value <= enforced_cost,
+            enforced_cost
+                == &CostType::max([enforced_cost.clone(), wallet_info_value.clone()].into_iter()),
             "Cannot enforce cost of statement. Current cost ({wallet_info_value:?}) is bigger \
              than enforced cost ({enforced_cost:?})."
         );
@@ -477,10 +502,15 @@ struct CostContext<'a, CostType: CostTypeTrait> {
     enforced_costs: &'a OrderedHashMap<StatementIdx, CostType>,
     /// The cost before executing a Sierra statement.
     costs: UnorderedHashMap<StatementIdx, CostComputationStatus<CostType>>,
+    /// A topological sort according to the dependencies returned by
+    /// [get_branch_requirements_dependencies].
+    topological_order: Vec<StatementIdx>,
     /// A map from a statement to the [CostVar] variable it is responsible of, if exists.
     /// See [CostVar].
     cost_vars_values: UnorderedHashMap<StatementIdx, CostVar<CostType>>,
     function_entry_points: UnorderedHashSet<StatementIdx>,
+    // TODO: document.
+    excess: UnorderedHashMap<StatementIdx, CostType>,
 }
 impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
     /// Returns the cost of a libfunc for every output branch.
@@ -503,6 +533,10 @@ impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
         }
     }
 
+    // fn wallet_at_with_excess(&self, idx: &StatementIdx) -> WalletInfo<CostType> {
+    //     self.wallet_at(idx).value + self.excess.get(idx).cloned().unwrap_or_default()
+    // }
+
     /// Prepares the values for [Self::wallet_at].
     fn prepare_wallet_at<SpecificCostContext: SpecificCostContextTrait<CostType>>(
         &mut self,
@@ -521,6 +555,7 @@ impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
                     println!("Cost of {current_idx} is {res:?}."); // TODO: Remove this line.
                     // Update the cache with the result.
                     self.costs.insert(*current_idx, CostComputationStatus::Done(res.clone()));
+                    self.topological_order.push(*current_idx);
 
                     // Remove `idx` from `statements_to_visit`.
                     statements_to_visit.pop();
@@ -594,28 +629,121 @@ impl<'a, CostType: CostTypeTrait> CostContext<'a, CostType> {
 
                 // The wallet value at the beginning of the statement is the maximal value
                 // required by all the branches.
-                let res = WalletInfo::merge(branch_requirements, &mut self.cost_vars_values);
+                let res = WalletInfo::merge(
+                    branch_requirements,
+                    &mut self.cost_vars_values,
+                    self.excess.get(idx).cloned().unwrap_or_default(),
+                );
 
-                if invocation.branches.len() > 1 {
-                    // If there are multiple branches and no variables, add a variable.
-                    res.assign_all_variables(&mut self.cost_vars_values)
-                        + WalletInfo {
-                            value: CostType::default(),
-                            cost_vars: [*idx].into_iter().collect(),
-                        }
-                } else {
-                    res
-                }
+                // if invocation.branches.len() > 1 {
+                // If there are multiple branches and no variables, add a variable.
+                // res.assign_all_variables(&mut self.cost_vars_values)
+                //     + WalletInfo {
+                //         value: CostType::default(),
+                //         cost_vars: [*idx].into_iter().collect(),
+                //     }
+                // } else {
+                // res
+                // }
+                res
             }
         };
 
-        if let Some(enforced_cost) = self.enforced_costs.get(idx) {
-            res = res.enforce_cost(enforced_cost, &mut self.cost_vars_values);
-        } else if self.function_entry_points.contains(idx) {
-            res = res.assign_all_variables(&mut self.cost_vars_values);
-        }
+        // if let Some(enforced_cost) = self.enforced_costs.get(idx) {
+        //     res = res.enforce_cost(enforced_cost, &mut self.cost_vars_values);
+        // } else if self.function_entry_points.contains(idx) {
+        //     res = res.assign_all_variables(&mut self.cost_vars_values);
+        // }
 
         res
+    }
+
+    fn compute_excess<SpecificCostContext: SpecificCostContextTrait<CostType>>(
+        &mut self,
+        specific_cost_context: &SpecificCostContext,
+    ) {
+        let mut finalized_excess_statements = UnorderedHashSet::<StatementIdx>::default();
+
+        for idx in self.topological_order.iter().rev() {
+            finalized_excess_statements.insert(*idx);
+
+            let excess = if let Some(enforced_cost) = self.enforced_costs.get(idx) {
+                // No excess is expected at statement with enforced cost.
+                assert_eq!(self.excess.get(idx), None, "TODO"); // TODO
+
+                let wallet_value = self.wallet_at(idx).value;
+                assert!(
+                    enforced_cost
+                        == &CostType::max(
+                            [enforced_cost.clone(), wallet_value.clone()].into_iter()
+                        ),
+                    "Cannot enforce cost of statement. Current cost ({wallet_value:?}) is bigger \
+                     than enforced cost ({enforced_cost:?})."
+                );
+                enforced_cost.clone() - wallet_value
+            } else {
+                self.excess.get(idx).cloned().unwrap_or_default()
+            };
+
+            println!("Excess for {idx} is {excess:?}"); // TODO: Remove this line.
+
+            let invocation = match &self.program.get_statement(idx).unwrap() {
+                Statement::Invocation(invocation) => invocation,
+                Statement::Return(_) => {
+                    // Excess cannot be handled, simply drop it.
+                    continue;
+                }
+            };
+
+            // Pass the excess to the branches.
+            for branch_info in &invocation.branches {
+                println!("Here"); // TODO: Remove this line.
+                let branch_statement = idx.next(&branch_info.target);
+                if finalized_excess_statements.contains(&branch_statement) {
+                    // Don't update statements which were already visited.
+                    println!("Skipping excess for {branch_statement} to {excess:?}"); // TODO: Remove this line.
+                    continue;
+                }
+                match self.excess.entry(branch_statement) {
+                    hash_map::Entry::Occupied(mut entry) => {
+                        println!("Min excess for {branch_statement} to {excess:?}"); // TODO: Remove this line.
+                        let current_value = entry.get();
+                        entry.insert(CostType::min2(current_value, &excess));
+                    }
+                    hash_map::Entry::Vacant(entry) => {
+                        println!("Setting excess for {branch_statement} to {excess:?}"); // TODO: Remove this line.
+                        entry.insert(excess.clone());
+                    }
+                }
+            }
+
+            let libfunc_cost: Vec<BranchCost> = self.get_cost(&invocation.libfunc_id);
+
+            let branch_requirements = get_branch_requirements(
+                specific_cost_context,
+                &|statement_idx| self.wallet_at(statement_idx),
+                idx,
+                invocation,
+                &libfunc_cost,
+            );
+
+            // let wallet_value = self.wallet_at(idx);
+            // let future_wallet_value = match self.costs.get(idx) {
+            //     Some(CostComputationStatus::Done(res)) => res.clone(),
+            //     _ => {
+            //         panic!("Wallet value for statement {idx} was not yet computed.")
+            //     }
+            // };
+
+            // let excess = specific_cost_context.get_excess(
+            //     idx,
+            //     &self.get_cost(&self.program.get_statement(idx).unwrap().get_libfunc_id()),
+            //     &wallet_value,
+            //     future_wallet_value,
+            // );
+
+            // self.excess.insert(*idx, excess);
+        }
     }
 }
 
@@ -772,7 +900,7 @@ impl<'a> SpecificCostContextTrait<i32> for PostcostContext<'a> {
             BranchCost::RedepositGas => 0,
         };
         let new_variables: OrderedHashSet<StatementIdx> = match &*branch_cost {
-            BranchCost::RedepositGas => [*idx].into_iter().collect(),
+            // BranchCost::RedepositGas => [*idx].into_iter().collect(),
             _ => Default::default(),
         };
         let future_wallet_value = wallet_at_fn(&idx.next(&branch_info.target));
