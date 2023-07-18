@@ -1,6 +1,7 @@
 use cairo_lang_debug::DebugWithDb;
 use cairo_lang_semantic::ConcreteVariant;
 use id_arena::Arena;
+use itertools::Itertools;
 
 use crate::db::LoweringGroup;
 use crate::objects::{
@@ -91,11 +92,11 @@ impl DebugWithDb<LoweredFormatter<'_>> for FlatBlockEnd {
         let outputs = match &self {
             FlatBlockEnd::Return(returns) => {
                 write!(f, "  Return(")?;
-                returns.iter().map(|var_usage| var_usage.var_id).collect()
+                returns.iter().map(|var_usage| var_usage).collect()
             }
             FlatBlockEnd::Panic(data) => {
                 write!(f, "  Panic(")?;
-                vec![data.var_id]
+                vec![data]
             }
             FlatBlockEnd::Goto(block_id, remapping) => {
                 return write!(f, "  Goto({:?}, {:?})", block_id.debug(ctx), remapping.debug(ctx));
@@ -148,6 +149,9 @@ impl DebugWithDb<LoweredFormatter<'_>> for VarUsage {
                     .stable_location
                     .syntax_node(ctx.db.upcast())
                     .get_text_without_trivia(ctx.db.upcast())
+                     // Use first line for multi-line text.
+                    .lines()
+                    .join(" ")
             )?;
         }
         Ok(())
