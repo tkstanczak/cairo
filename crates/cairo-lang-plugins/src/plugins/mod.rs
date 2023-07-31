@@ -1,5 +1,5 @@
 pub use config::*;
-pub use derive::*;
+pub use derive::DerivePlugin;
 pub use generate_trait::*;
 pub use panicable::*;
 
