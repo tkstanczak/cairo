@@ -330,6 +330,9 @@ use bytes_31::{
 mod byte_array;
 use byte_array::{ByteArray, ByteArrayIndexView, ByteArrayTrait};
 
+// to_string.
+mod to_string;
+
 #[cfg(test)]
 mod test;
 
