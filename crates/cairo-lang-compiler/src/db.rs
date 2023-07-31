@@ -13,6 +13,7 @@ use cairo_lang_filesystem::ids::CrateLongId;
 use cairo_lang_lowering::db::{LoweringDatabase, LoweringGroup};
 use cairo_lang_parser::db::ParserDatabase;
 use cairo_lang_plugins::get_default_plugins;
+use cairo_lang_plugins::plugins::derive;
 use cairo_lang_project::ProjectConfig;
 use cairo_lang_semantic::db::{SemanticDatabase, SemanticGroup};
 use cairo_lang_sierra_generator::db::SierraGenDatabase;
@@ -70,6 +71,7 @@ impl Default for RootDatabase {
 #[derive(Clone, Debug)]
 pub struct RootDatabaseBuilder {
     plugins: Vec<Arc<dyn MacroPlugin>>,
+    trait_derivers: Vec<Arc<dyn derive::TraitDeriver>>,
     detect_corelib: bool,
     project_config: Option<Box<ProjectConfig>>,
     cfg_set: Option<CfgSet>,
@@ -79,6 +81,7 @@ impl RootDatabaseBuilder {
     fn new() -> Self {
         Self {
             plugins: get_default_plugins(),
+            trait_derivers: derive::basic_trait_derivers(),
             detect_corelib: false,
             project_config: None,
             cfg_set: None,
@@ -92,6 +95,19 @@ impl RootDatabaseBuilder {
 
     pub fn clear_plugins(&mut self) -> &mut Self {
         self.plugins.clear();
+        self
+    }
+
+    pub fn reset_trait_derivers(&mut self) -> &mut Self {
+        self.trait_derivers = derive::basic_trait_derivers();
+        self
+    }
+
+    pub fn with_trait_deriver(
+        &mut self,
+        trait_deriver: Arc<dyn derive::TraitDeriver>,
+    ) -> &mut Self {
+        self.trait_derivers.push(trait_deriver);
         self
     }
 
@@ -114,8 +130,9 @@ impl RootDatabaseBuilder {
         // NOTE: Order of operations matters here!
         //   Errors if something is not OK are very subtle, mostly this results in missing
         //   identifier diagnostics, or panics regarding lack of corelib items.
-
-        let mut db = RootDatabase::new(self.plugins.clone());
+        let mut plugins = self.plugins.clone();
+        plugins.push(Arc::new(derive::DerivePlugin::new(self.trait_derivers.clone())));
+        let mut db = RootDatabase::new(plugins);
 
         if let Some(cfg_set) = &self.cfg_set {
             db.use_cfg(cfg_set);

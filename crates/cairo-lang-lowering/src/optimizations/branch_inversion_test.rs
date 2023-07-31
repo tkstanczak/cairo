@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use cairo_lang_debug::DebugWithDb;
 use cairo_lang_defs::db::DefsGroup;
-use cairo_lang_plugins::get_default_plugins;
+use cairo_lang_plugins::get_plugins_for_testing;
 use cairo_lang_semantic::test_utils::setup_test_function;
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 
@@ -28,7 +28,7 @@ fn test_branch_inversion(
     inputs: &OrderedHashMap<String, String>,
 ) -> OrderedHashMap<String, String> {
     let db = &mut LoweringDatabaseForTesting::default();
-    db.set_macro_plugins(get_default_plugins());
+    db.set_macro_plugins(get_plugins_for_testing());
     let (test_function, semantic_diagnostics) = setup_test_function(
         db,
         inputs["function"].as_str(),

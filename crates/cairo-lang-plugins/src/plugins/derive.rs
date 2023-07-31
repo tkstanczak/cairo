@@ -17,7 +17,7 @@ use indoc::indoc;
 use itertools::chain;
 
 /// A trait for deriving a trait implementation.
-pub trait TraitDerive: core::fmt::Debug + Send + Sync {
+pub trait TraitDeriver: core::fmt::Debug + Send + Sync {
     /// Name of the trait to derive.
     fn trait_name(&self) -> &str;
 
@@ -36,13 +36,16 @@ pub trait TraitDerive: core::fmt::Debug + Send + Sync {
 
 #[derive(Debug)]
 pub struct DerivePlugin {
-    trait_derives: OrderedHashMap<String, Arc<dyn TraitDerive>>,
+    trait_derivers: OrderedHashMap<String, Arc<dyn TraitDeriver>>,
 }
 
 impl DerivePlugin {
-    pub fn new(trait_derives: Vec<Arc<dyn TraitDerive>>) -> Self {
+    pub fn new(trait_derivers: Vec<Arc<dyn TraitDeriver>>) -> Self {
         Self {
-            trait_derives: trait_derives.into_iter().map(|d| (d.trait_name().into(), d)).collect(),
+            trait_derivers: trait_derivers
+                .into_iter()
+                .map(|d| (d.trait_name().into(), d))
+                .collect(),
         }
     }
 
@@ -84,12 +87,12 @@ impl DerivePlugin {
                 };
 
                 let derived = segment.ident(db);
-                let Some(trait_derive) = self.trait_derives.get(derived.text(db).as_str()) else {
+                let Some(trait_deriver) = self.trait_derivers.get(derived.text(db).as_str()) else {
                     // TODO(spapini): How to allow downstream derives while also
                     //  alerting the user when the derive doesn't exist?
                     continue;
                 };
-                let derive_result = trait_derive.derive(&info, &derived);
+                let derive_result = trait_deriver.derive(&info, &derived);
                 if let Some(code) = derive_result.code {
                     let start = TextOffset::default().add_width(TextWidth::from_str(&builder.code));
                     builder.add_modified(code);
@@ -104,7 +107,7 @@ impl DerivePlugin {
                     });
                 }
                 diagnostics.extend(derive_result.diagnostics);
-                if let Some(derived_aux_data) = trait_derive.aux_data(db, &info) {
+                if let Some(derived_aux_data) = trait_deriver.aux_data(db, &info) {
                     aux_data.push(derived_aux_data);
                 }
             }
@@ -126,14 +129,8 @@ impl DerivePlugin {
     }
 }
 
-impl Default for DerivePlugin {
-    fn default() -> Self {
-        Self::new(basic_derives())
-    }
-}
-
 /// Returns the basic derives that are always available.
-fn basic_derives() -> Vec<Arc<dyn TraitDerive>> {
+pub fn basic_trait_derivers() -> Vec<Arc<dyn TraitDeriver>> {
     vec![
         Arc::new(EmptyDerive("Copy".into())),
         Arc::new(EmptyDerive("Drop".into())),
@@ -417,7 +414,7 @@ impl DeriveResult {
 /// Derives the `Clone` trait.
 #[derive(Debug)]
 struct CloneDerive;
-impl TraitDerive for CloneDerive {
+impl TraitDeriver for CloneDerive {
     fn trait_name(&self) -> &str {
         "Clone"
     }
@@ -484,7 +481,7 @@ impl TraitDerive for CloneDerive {
 /// Derives the `Destruct` trait.
 #[derive(Debug)]
 struct DestructDerive;
-impl TraitDerive for DestructDerive {
+impl TraitDeriver for DestructDerive {
     fn trait_name(&self) -> &str {
         "Destruct"
     }
@@ -547,7 +544,7 @@ impl TraitDerive for DestructDerive {
 /// Derives the `PanicDestruct` trait.
 #[derive(Debug)]
 struct PanicDestructDerive;
-impl TraitDerive for PanicDestructDerive {
+impl TraitDeriver for PanicDestructDerive {
     fn trait_name(&self) -> &str {
         "PanicDestruct"
     }
@@ -611,7 +608,7 @@ impl TraitDerive for PanicDestructDerive {
 /// Derives the `PartialEq` trait.
 #[derive(Debug)]
 struct PartialEqDerive;
-impl TraitDerive for PartialEqDerive {
+impl TraitDeriver for PartialEqDerive {
     fn trait_name(&self) -> &str {
         "PartialEq"
     }
@@ -694,7 +691,7 @@ impl TraitDerive for PartialEqDerive {
 /// Derives the `Serde` trait.
 #[derive(Debug)]
 struct SerdeDerive;
-impl TraitDerive for SerdeDerive {
+impl TraitDeriver for SerdeDerive {
     fn trait_name(&self) -> &str {
         "Serde"
     }
@@ -811,7 +808,7 @@ impl TraitDerive for SerdeDerive {
 /// Derives the `Destruct` trait.
 #[derive(Debug)]
 struct EmptyDerive(&'static str);
-impl TraitDerive for EmptyDerive {
+impl TraitDeriver for EmptyDerive {
     fn trait_name(&self) -> &str {
         self.0
     }

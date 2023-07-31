@@ -9,7 +9,7 @@ use cairo_lang_parser::utils::{get_syntax_file_and_diagnostics, SimpleParserData
 use cairo_lang_syntax::node::TypedSyntaxNode;
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 
-use crate::get_default_plugins;
+use crate::get_plugins_for_testing;
 
 cairo_lang_test_utils::test_file_test!(
     expand_plugin,
@@ -41,7 +41,7 @@ pub fn test_expand_plugin(
 
     let (syntax_file, diagnostics) = get_syntax_file_and_diagnostics(db, file_id, cairo_code);
     assert!(diagnostics.is_empty(), "Unexpected diagnostics:\n{}", diagnostics.format(db));
-    let plugins = get_default_plugins();
+    let plugins = get_plugins_for_testing();
     let mut generated_items: Vec<String> = Vec::new();
     let mut diagnostic_items: Vec<String> = Vec::new();
     for item in syntax_file.items(db).elements(db).into_iter() {
