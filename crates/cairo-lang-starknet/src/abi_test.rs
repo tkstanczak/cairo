@@ -9,6 +9,7 @@ use indoc::indoc;
 use pretty_assertions::assert_eq;
 
 use crate::abi::AbiBuilder;
+use crate::plugin::store_derive::StoreDeriver;
 use crate::plugin::StarkNetPlugin;
 
 #[test]
@@ -187,6 +188,7 @@ fn test_abi_failure() {
     let db = &mut RootDatabase::builder()
         .detect_corelib()
         .with_macro_plugin(Arc::new(StarkNetPlugin::default()))
+        .with_trait_deriver(Arc::new(StoreDeriver))
         .build()
         .unwrap();
     let module_id = setup_test_module(

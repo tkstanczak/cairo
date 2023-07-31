@@ -246,12 +246,10 @@ impl WrappedFelt252Serde of Serde<WrappedFelt252> {
         })
     }
 }
-
-
-storage_access_impl:
-
-impl StoreWrappedFelt252 of starknet::Store::<WrappedFelt252> {
-    fn read(address_domain: u32, base: starknet::StorageBaseAddress) -> starknet::SyscallResult<WrappedFelt252> {
+impl WrappedFelt252StarknetStore of starknet::Store<WrappedFelt252> {
+    fn read(
+        address_domain: u32, base: starknet::StorageBaseAddress
+    ) -> starknet::SyscallResult<WrappedFelt252> {
         let value = starknet::Store::<felt252>::read(address_domain, base)?;
         starknet::SyscallResult::Ok(
             WrappedFelt252 {
@@ -259,11 +257,15 @@ impl StoreWrappedFelt252 of starknet::Store::<WrappedFelt252> {
             }
         )
     }
-    fn write(address_domain: u32, base: starknet::StorageBaseAddress, value: WrappedFelt252) -> starknet::SyscallResult<()> {
+    fn write(
+        address_domain: u32, base: starknet::StorageBaseAddress, value: WrappedFelt252
+    ) -> starknet::SyscallResult<()> {
         starknet::Store::<felt252>::write(address_domain, base, value.value)?;
         starknet::SyscallResult::Ok(())
     }
-    fn read_at_offset(address_domain: u32, base: starknet::StorageBaseAddress, offset: u8) -> starknet::SyscallResult<WrappedFelt252> {
+    fn read_at_offset(
+        address_domain: u32, base: starknet::StorageBaseAddress, offset: u8
+    ) -> starknet::SyscallResult<WrappedFelt252> {
         let value = starknet::Store::<felt252>::read_at_offset(address_domain, base, offset)?;
         starknet::SyscallResult::Ok(
             WrappedFelt252 {
@@ -272,7 +274,9 @@ impl StoreWrappedFelt252 of starknet::Store::<WrappedFelt252> {
         )
     }
     #[inline(always)]
-    fn write_at_offset(address_domain: u32, base: starknet::StorageBaseAddress, offset: u8, value: WrappedFelt252) -> starknet::SyscallResult<()> {
+    fn write_at_offset(
+        address_domain: u32, base: starknet::StorageBaseAddress, offset: u8, value: WrappedFelt252
+    ) -> starknet::SyscallResult<()> {
         starknet::Store::<felt252>::write_at_offset(address_domain, base, offset, value.value)?;
         starknet::SyscallResult::Ok(())
     }
@@ -282,14 +286,10 @@ impl StoreWrappedFelt252 of starknet::Store::<WrappedFelt252> {
     }
 }
 
+
 impls:
 
 impl ContractStateDrop of Drop<ContractState>;
-
-
-impls:
-
-impl EventDrop of Drop<Event>;
 
 
 event_impl:
@@ -309,5 +309,11 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics

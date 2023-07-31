@@ -146,11 +146,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -168,6 +163,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: The first paramater of an entry point must be `self`.
@@ -309,11 +310,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -331,6 +327,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: The constructor function must be called `constructor`.
@@ -450,11 +452,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -473,6 +470,12 @@ impl EventIsEvent of starknet::Event<Event> {
     }
 }
 
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
+
 //! > expected_diagnostics
 error: Plugin diagnostic: Non `LegacyMap` mapping is not yet supported.
  --> lib.cairo:5:18
@@ -489,10 +492,10 @@ error: Plugin diagnostic: Identifier not found.
         mapping: Map::<felt252, felt252>,
         ^*****^
 
-error: Invalid drop trait implementation, Candidate impl core::traits::SnapshotDrop::<?0> has an unused generic parameter..
- --> impls:1:1
-impl ContractStateDrop of Drop<ContractState>;
-^********************************************^
+error: Plugin diagnostic: Invalid drop trait implementation, Candidate impl core::traits::SnapshotDrop::<?0> has an unused generic parameter..
+ --> contract:7:10
+#[derive(Drop)]
+         ^****^
 
 //! > ==========================================================================
 
@@ -678,11 +681,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -700,6 +698,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: Only #[external(v0)] is supported.
@@ -844,11 +848,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -866,6 +865,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 
@@ -1000,11 +1005,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -1022,6 +1022,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Unexpected return type. Expected: "(core::felt252, core::felt252)", found: "()".
@@ -1161,11 +1167,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -1183,6 +1184,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: Contract entry points cannot have generic arguments
@@ -1345,11 +1352,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -1367,6 +1369,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Unexpected return type. Expected: "(core::felt252, core::felt252)", found: "()".
@@ -1564,11 +1572,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -1586,6 +1589,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 
@@ -1762,11 +1771,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -1784,6 +1788,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: `raw_output` functions cannot have `ref` parameters.
@@ -1981,11 +1991,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -2003,6 +2008,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: The name `same_name` is defined multiple times.
@@ -2218,11 +2229,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -2240,6 +2246,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: Only #[external(v0)] is supported.
@@ -2484,11 +2496,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -2506,6 +2513,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: The 'external' attribute is not allowed inside a contract external impl.
@@ -2636,11 +2649,6 @@ mod __constructor {
 }
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -2659,6 +2667,11 @@ impl EventIsEvent of starknet::Event<Event> {
     }
 }
 
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 
 impls:
@@ -2787,11 +2800,6 @@ mod __constructor {
 }
 
 
-impls:
-
-impl MyEventDrop of Drop<MyEvent>;
-
-
 event_impl:
 
 impl MyEventIsEvent of starknet::Event<MyEvent> {
@@ -2814,12 +2822,12 @@ impl MyEventIsEvent of starknet::Event<MyEvent> {
 
 impls:
 
-impl ContractStateDrop of Drop<ContractState>;
+impl MyEventDrop of Drop<MyEvent>;
 
 
 impls:
 
-impl EventDrop of Drop<Event>;
+impl ContractStateDrop of Drop<ContractState>;
 
 
 event_impl:
@@ -2839,6 +2847,12 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics
 error: Plugin diagnostic: Contract type that is marked with #[event] must be named `Event`.

@@ -3647,7 +3647,7 @@
       ],
       [
         229,
-        "function_call<user@core::integer::Storeu256::read>"
+        "function_call<user@core::integer::u256StarknetStore::read>"
       ],
       [
         230,
@@ -3923,7 +3923,7 @@
       ],
       [
         298,
-        "function_call<user@core::integer::Storeu256::write>"
+        "function_call<user@core::integer::u256StarknetStore::write>"
       ],
       [
         299,
@@ -4557,7 +4557,7 @@
       ],
       [
         55,
-        "core::integer::Storeu256::read"
+        "core::integer::u256StarknetStore::read"
       ],
       [
         56,
@@ -4605,7 +4605,7 @@
       ],
       [
         67,
-        "core::integer::Storeu256::write"
+        "core::integer::u256StarknetStore::write"
       ],
       [
         68,

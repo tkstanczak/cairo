@@ -9,6 +9,7 @@ use pretty_assertions::assert_eq;
 
 use crate::contract::{find_contracts, get_module_functions, starknet_keccak};
 use crate::plugin::consts::EXTERNAL_MODULE;
+use crate::plugin::store_derive::StoreDeriver;
 use crate::plugin::StarkNetPlugin;
 
 #[test]
@@ -16,6 +17,7 @@ fn test_contract_resolving() {
     let db = &mut RootDatabase::builder()
         .detect_corelib()
         .with_macro_plugin(Arc::new(StarkNetPlugin::default()))
+        .with_trait_deriver(Arc::new(StoreDeriver))
         .build()
         .unwrap();
     let crate_id = setup_test_crate(

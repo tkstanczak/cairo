@@ -288,7 +288,7 @@ pub fn handle_contract_by_storage(
                     );
                     let function_name = RewriteNode::interpolate_patched(
                         "$impl_name$::$func_name$",
-                        [
+                        &[
                             ("impl_name".to_string(), impl_name.clone()),
                             ("func_name".to_string(), function_name),
                         ]
@@ -354,7 +354,7 @@ pub fn handle_contract_by_storage(
         "
         )
         .as_str(),
-        [
+        &[
             (
                 "contract_name".to_string(),
                 RewriteNode::new_trimmed(module_name_ast.as_syntax_node()),

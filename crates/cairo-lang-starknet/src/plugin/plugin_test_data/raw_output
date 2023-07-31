@@ -159,11 +159,6 @@ impls:
 impl ContractStateDrop of Drop<ContractState>;
 
 
-impls:
-
-impl EventDrop of Drop<Event>;
-
-
 event_impl:
 
 impl EventIsEvent of starknet::Event<Event> {
@@ -181,5 +176,11 @@ impl EventIsEvent of starknet::Event<Event> {
         Option::None
     }
 }
+
+
+
+impls:
+
+impl EventDrop of Drop<Event>;
 
 //! > expected_diagnostics

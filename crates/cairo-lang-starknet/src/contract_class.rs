@@ -28,6 +28,7 @@ use crate::contract::{
 };
 use crate::felt252_serde::sierra_to_felt252s;
 use crate::plugin::consts::{CONSTRUCTOR_MODULE, EXTERNAL_MODULE, L1_HANDLER_MODULE};
+use crate::plugin::store_derive::StoreDeriver;
 use crate::plugin::StarkNetPlugin;
 
 #[cfg(test)]
@@ -83,6 +84,7 @@ pub fn compile_path(
     let mut db = RootDatabase::builder()
         .detect_corelib()
         .with_macro_plugin(Arc::new(StarkNetPlugin::default()))
+        .with_trait_deriver(Arc::new(StoreDeriver))
         .build()?;
 
     let main_crate_ids = setup_project(&mut db, Path::new(&path))?;

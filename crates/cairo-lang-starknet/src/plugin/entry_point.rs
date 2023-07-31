@@ -114,7 +114,7 @@ pub fn generate_entry_point_wrapper(
     let function_name = RewriteNode::new_trimmed(declaration.name(db).as_syntax_node());
     let wrapped_name = RewriteNode::interpolate_patched(
         "super::$wrapped_function_name$",
-        [("wrapped_function_name".to_string(), wrapped_function_name)].into(),
+        &[("wrapped_function_name".to_string(), wrapped_function_name)].into(),
     );
 
     let ret_ty = sig.ret_ty(db);
@@ -162,7 +162,7 @@ pub fn generate_entry_point_wrapper(
 
     let output_handling = RewriteNode::interpolate_patched(
         &output_handling_string,
-        [
+        &[
             ("wrapped_name".to_string(), wrapped_name),
             ("ref_appends".to_string(), RewriteNode::new_modified(ref_appends)),
         ]
@@ -187,7 +187,7 @@ pub fn generate_entry_point_wrapper(
             let mut contract_state = super::unsafe_new_contract_state();
             $output_handling$
         }",
-        [
+        &[
             ("function_name".to_string(), function_name),
             ("output_handling".to_string(), output_handling),
             ("arg_definitions".to_string(), arg_definitions),

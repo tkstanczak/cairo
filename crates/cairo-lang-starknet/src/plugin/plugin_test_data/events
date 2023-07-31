@@ -43,6 +43,28 @@ enum MyEventEnum {
     B: B,
 }
 
+event_impl:
+
+impl AIsEvent of starknet::Event<A> {
+    fn append_keys_and_data(
+        self: @A, ref keys: Array<felt252>, ref data: Array<felt252>
+    ) {
+                serde::Serde::serialize(self.x, ref data);
+                serde::Serde::serialize(self.data, ref keys);
+    }
+    fn deserialize(
+        ref keys: Span<felt252>, ref data: Span<felt252>,
+    ) -> Option<A> {
+                let x = serde::Serde::deserialize(
+                    ref data
+                )?;
+                let data = serde::Serde::deserialize(
+                    ref keys
+                )?;
+        Option::Some(A {x, data, })
+    }
+}
+
 impls:
 
 impl APartialEq of PartialEq<A> {
@@ -71,23 +93,19 @@ impl ASerde of Serde<A> {
 
 event_impl:
 
-impl AIsEvent of starknet::Event<A> {
+impl BIsEvent of starknet::Event<B> {
     fn append_keys_and_data(
-        self: @A, ref keys: Array<felt252>, ref data: Array<felt252>
+        self: @B, ref keys: Array<felt252>, ref data: Array<felt252>
     ) {
                 serde::Serde::serialize(self.x, ref data);
-                serde::Serde::serialize(self.data, ref keys);
     }
     fn deserialize(
         ref keys: Span<felt252>, ref data: Span<felt252>,
-    ) -> Option<A> {
+    ) -> Option<B> {
                 let x = serde::Serde::deserialize(
                     ref data
                 )?;
-                let data = serde::Serde::deserialize(
-                    ref keys
-                )?;
-        Option::Some(A {x, data, })
+        Option::Some(B {x, })
     }
 }
 
@@ -113,47 +131,6 @@ impl BSerde of Serde<B> {
         })
     }
 }
-
-
-event_impl:
-
-impl BIsEvent of starknet::Event<B> {
-    fn append_keys_and_data(
-        self: @B, ref keys: Array<felt252>, ref data: Array<felt252>
-    ) {
-                serde::Serde::serialize(self.x, ref data);
-    }
-    fn deserialize(
-        ref keys: Span<felt252>, ref data: Span<felt252>,
-    ) -> Option<B> {
-                let x = serde::Serde::deserialize(
-                    ref data
-                )?;
-        Option::Some(B {x, })
-    }
-}
-
-impls:
-
-impl MyEventEnumPartialEq of PartialEq<MyEventEnum> {
-    fn eq(lhs: @MyEventEnum, rhs: @MyEventEnum) -> bool {
-        match lhs {
-            MyEventEnum::A(x) => match rhs {
-                MyEventEnum::A(y) => x == y,
-                MyEventEnum::B(y) => false,
-            },
-            MyEventEnum::B(x) => match rhs {
-                MyEventEnum::A(y) => false,
-                MyEventEnum::B(y) => x == y,
-            },
-        }
-    }
-    #[inline(always)]
-    fn ne(lhs: @MyEventEnum, rhs: @MyEventEnum) -> bool {
-        !(lhs == rhs)
-    }
-}
-impl MyEventEnumDrop of Drop<MyEventEnum>;
 
 
 event_impl:
@@ -207,5 +184,29 @@ impl MyEventEnumBIntoEvent of Into<B, MyEventEnum> {
         MyEventEnum::B(self)
     }
 }
+
+
+
+impls:
+
+impl MyEventEnumPartialEq of PartialEq<MyEventEnum> {
+    fn eq(lhs: @MyEventEnum, rhs: @MyEventEnum) -> bool {
+        match lhs {
+            MyEventEnum::A(x) => match rhs {
+                MyEventEnum::A(y) => x == y,
+                MyEventEnum::B(y) => false,
+            },
+            MyEventEnum::B(x) => match rhs {
+                MyEventEnum::A(y) => false,
+                MyEventEnum::B(y) => x == y,
+            },
+        }
+    }
+    #[inline(always)]
+    fn ne(lhs: @MyEventEnum, rhs: @MyEventEnum) -> bool {
+        !(lhs == rhs)
+    }
+}
+impl MyEventEnumDrop of Drop<MyEventEnum>;
 
 //! > expected_diagnostics

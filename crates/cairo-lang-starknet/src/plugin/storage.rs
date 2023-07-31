@@ -26,7 +26,7 @@ pub fn handle_storage_struct(
         members_code.push(RewriteNode::interpolate_patched(
             "
         $name$: $name$::ContractState,",
-            UnorderedHashMap::from([(
+            &UnorderedHashMap::from([(
                 "name".to_string(),
                 RewriteNode::new_trimmed(name_node.clone()),
             )]),
@@ -34,7 +34,7 @@ pub fn handle_storage_struct(
         members_init_code.push(RewriteNode::interpolate_patched(
             "
             $name$: $name$::ContractState{},",
-            UnorderedHashMap::from([("name".to_string(), RewriteNode::new_trimmed(name_node))]),
+            &UnorderedHashMap::from([("name".to_string(), RewriteNode::new_trimmed(name_node))]),
         ));
         let address = format!("0x{:x}", starknet_keccak(name.as_bytes()));
         let type_ast = member.type_clause(db).ty(db);
@@ -42,7 +42,7 @@ pub fn handle_storage_struct(
             Some((key_type_ast, value_type_ast, MappingType::Legacy)) => {
                 vars_code.push(RewriteNode::interpolate_patched(
                     handle_legacy_mapping_storage_var(&address).as_str(),
-                    [
+                    &[
                         (
                             "storage_var_name".to_string(),
                             RewriteNode::new_trimmed(member.name(db).as_syntax_node()),
@@ -69,7 +69,7 @@ pub fn handle_storage_struct(
             None => {
                 vars_code.push(RewriteNode::interpolate_patched(
                     handle_simple_storage_var(&address).as_str(),
-                    [
+                    &[
                         (
                             "storage_var_name".to_string(),
                             RewriteNode::new_trimmed(member.name(db).as_syntax_node()),
@@ -124,7 +124,7 @@ pub fn handle_storage_struct(
         ",
         )
         .as_str(),
-        UnorderedHashMap::from([
+        &UnorderedHashMap::from([
             ("members_code".to_string(), RewriteNode::new_modified(members_code)),
             ("vars_code".to_string(), RewriteNode::new_modified(vars_code)),
             ("member_init_code".to_string(), RewriteNode::new_modified(members_init_code)),

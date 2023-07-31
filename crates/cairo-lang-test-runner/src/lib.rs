@@ -27,6 +27,7 @@ use cairo_lang_starknet::contract::{
     find_contracts, get_contracts_info, get_module_functions, ContractInfo,
 };
 use cairo_lang_starknet::plugin::consts::{CONSTRUCTOR_MODULE, EXTERNAL_MODULE, L1_HANDLER_MODULE};
+use cairo_lang_starknet::plugin::store_derive::StoreDeriver;
 use cairo_lang_starknet::plugin::StarkNetPlugin;
 use cairo_lang_utils::casts::IntoOrPanic;
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
@@ -75,7 +76,8 @@ impl TestRunner {
             b.with_macro_plugin(Arc::new(TestPlugin::default()));
 
             if starknet {
-                b.with_macro_plugin(Arc::new(StarkNetPlugin::default()));
+                b.with_macro_plugin(Arc::new(StarkNetPlugin::default()))
+                    .with_trait_deriver(Arc::new(StoreDeriver));
             }
 
             b.build()?

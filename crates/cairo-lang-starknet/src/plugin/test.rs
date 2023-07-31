@@ -9,6 +9,7 @@ use cairo_lang_semantic::test_utils::setup_test_module;
 use cairo_lang_test_utils::parse_test_file::TestFileRunner;
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 
+use super::store_derive::StoreDeriver;
 use crate::plugin::StarkNetPlugin;
 
 struct ExpandContractTestRunner {
@@ -21,6 +22,7 @@ impl Default for ExpandContractTestRunner {
             db: RootDatabase::builder()
                 .detect_corelib()
                 .with_macro_plugin(Arc::new(StarkNetPlugin::default()))
+                .with_trait_deriver(Arc::new(StoreDeriver))
                 .build()
                 .unwrap(),
         }

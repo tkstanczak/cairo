@@ -1923,7 +1923,7 @@
       ],
       [
         167,
-        "function_call<user@new_syntax_test_contract::new_syntax_test_contract::StoreIOtherContractDispatcher::read>"
+        "function_call<user@new_syntax_test_contract::new_syntax_test_contract::IOtherContractDispatcherStarknetStore::read>"
       ],
       [
         168,
@@ -2051,7 +2051,7 @@
       ],
       [
         199,
-        "function_call<user@new_syntax_test_contract::new_syntax_test_contract::StoreIOtherContractDispatcher::write>"
+        "function_call<user@new_syntax_test_contract::new_syntax_test_contract::IOtherContractDispatcherStarknetStore::write>"
       ],
       [
         200,
@@ -2421,7 +2421,7 @@
       ],
       [
         29,
-        "new_syntax_test_contract::new_syntax_test_contract::StoreIOtherContractDispatcher::read"
+        "new_syntax_test_contract::new_syntax_test_contract::IOtherContractDispatcherStarknetStore::read"
       ],
       [
         30,
@@ -2441,7 +2441,7 @@
       ],
       [
         34,
-        "new_syntax_test_contract::new_syntax_test_contract::StoreIOtherContractDispatcher::write"
+        "new_syntax_test_contract::new_syntax_test_contract::IOtherContractDispatcherStarknetStore::write"
       ],
       [
         35,
