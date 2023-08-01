@@ -1,14 +1,18 @@
+use cairo_lang_compiler::diagnostics;
 use cairo_lang_defs::patcher::{ModifiedNode, PatchBuilder, RewriteNode};
 use cairo_lang_defs::plugin::{
     DynGeneratedFileAuxData, PluginDiagnostic, PluginGeneratedFile, PluginResult,
 };
+use cairo_lang_plugins::plugins::derive::{
+    DeriveInfo, DeriveResult, MemberInfo, TraitDeriver, TypeVariantInfo,
+};
 use cairo_lang_syntax::attribute::structured::{
-    AttributeArg, AttributeArgVariant, AttributeStructurize,
+    self, AttributeArg, AttributeArgVariant, AttributeStructurize,
 };
 use cairo_lang_syntax::node::ast::{self, OptionWrappedGenericParamList};
 use cairo_lang_syntax::node::db::SyntaxGroup;
 use cairo_lang_syntax::node::helpers::QueryAttrs;
-use cairo_lang_syntax::node::{Terminal, TypedSyntaxNode};
+use cairo_lang_syntax::node::{SyntaxNode, Terminal, TypedSyntaxNode};
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -37,54 +41,134 @@ pub enum EventFieldKind {
     Nested,
 }
 
-// TODO(spapini): Avoid names collisions with `keys` and `data`.
-/// Derive the `Event` trait for structs annotated with `derive(starknet::Event)`.
-pub fn handle_struct(db: &dyn SyntaxGroup, struct_ast: ast::ItemStruct) -> PluginResult {
-    let mut builder = PatchBuilder::new(db);
-    let mut diagnostics = vec![];
+struct EventCode {
+    append_keys_and_data_body: RewriteNode,
+    deserialize_body: RewriteNode,
+    additional_impls: RewriteNode,
+}
 
-    // TODO(spapini): Support generics.
-    let generic_params = struct_ast.generic_params(db);
-    let OptionWrappedGenericParamList::Empty(_) = generic_params else {
-        diagnostics.push(PluginDiagnostic {
-            message: "Event structs with generic arguments are unsupported".to_string(),
-            stable_ptr: generic_params.stable_ptr().untyped(),
-        });
-        return PluginResult { code: None, diagnostics, remove_original_item: false };
-    };
+/// Derive the `Store` trait for structs annotated with `derive(starknet::Store)`.
+#[derive(Debug)]
+pub struct EventDeriver;
+impl TraitDeriver for EventDeriver {
+    fn trait_name(&self) -> &str {
+        "starknet::Event"
+    }
+
+    fn aux_data(&self, db: &dyn SyntaxGroup, info: &DeriveInfo) -> Option<DynGeneratedFileAuxData> {
+        Some(DynGeneratedFileAuxData::new(StarkNetEventAuxData {
+            event_data: match &info.specific_info {
+                TypeVariantInfo::Enum(variants) => EventData::Enum {
+                    variants: variants
+                        .iter()
+                        .map(|variant| {
+                            (
+                                variant.name.get_text(db).into(),
+                                get_field_kind_for_member(
+                                    &mut vec![],
+                                    &variant.attributes,
+                                    EventFieldKind::Nested,
+                                ),
+                            )
+                        })
+                        .collect(),
+                },
+                TypeVariantInfo::Struct(members) => EventData::Struct {
+                    members: members
+                        .iter()
+                        .map(|member| {
+                            (
+                                member.name.get_text(db).into(),
+                                get_field_kind_for_member(
+                                    &mut vec![],
+                                    &member.attributes,
+                                    EventFieldKind::DataSerde,
+                                ),
+                            )
+                        })
+                        .collect(),
+                },
+                TypeVariantInfo::Extern => return None,
+            },
+        }))
+    }
+
+    fn derive(&self, info: &DeriveInfo, derived: &SyntaxNode) -> DeriveResult {
+        let (event_info, diagnostics) = match &info.specific_info {
+            TypeVariantInfo::Enum(variants) => enum_event_info(info, variants),
+            TypeVariantInfo::Struct(members) => struct_event_info(info, members),
+            TypeVariantInfo::Extern => return DeriveResult::unsupported_for_extern(derived),
+        };
+        let code = RewriteNode::interpolate_patched(
+            indoc! {"
+                $header$ {
+                    fn append_keys_and_data(
+                        self: @$ty$, ref keys: Array<felt252>, ref data: Array<felt252>
+                    ) {$append_keys_and_data_body$}
+                    fn deserialize(
+                        ref keys: Span<felt252>, ref data: Span<felt252>,
+                    ) -> Option<$ty$> {
+                        $deserialize_body$
+                    }
+                }
+                $additional_impls$
+            "},
+            &[
+                (
+                    "header".into(),
+                    info.impl_header(
+                        derived,
+                        "StarknetEvent",
+                        &[RewriteNode::from("starknet::Event"), RewriteNode::from("Destruct")],
+                    ),
+                ),
+                ("ty".into(), info.full_typename()),
+                ("append_keys_and_data_body".into(), event_info.append_keys_and_data_body),
+                ("deserialize_body".into(), event_info.deserialize_body),
+                ("additional_impls".into(), event_info.additional_impls),
+            ]
+            .into(),
+        );
+        DeriveResult { code: Some(code), diagnostics }
+    }
+}
+
+/// Derive the `Event` trait for structs annotated with `derive(starknet::Event)`.
+fn struct_event_info(
+    info: &DeriveInfo,
+    members: &[MemberInfo],
+) -> (EventCode, Vec<PluginDiagnostic>) {
+    let mut diagnostics = vec![];
 
     // Generate append_keys_and_data() code.
     let mut append_members = vec![];
     let mut deserialize_members = vec![];
     let mut ctor = vec![];
-    let mut members = vec![];
-    for member in struct_ast.members(db).elements(db) {
-        let member_name = RewriteNode::new_trimmed(member.name(db).as_syntax_node());
-        let member_kind =
-            get_field_kind_for_member(db, &mut diagnostics, &member, EventFieldKind::DataSerde);
-        members.push((member.name(db).text(db), member_kind));
+    for member in members.iter() {
+        let member_kind = get_field_kind_for_member(
+            &mut diagnostics,
+            &member.attributes,
+            EventFieldKind::DataSerde,
+        );
 
         let member_for_append = RewriteNode::interpolate_patched(
             "self.$member_name$",
-            &[(String::from("member_name"), member_name.clone())].into(),
+            &[(String::from("member_name"), member.name.clone())].into(),
         );
         let append_member = append_field(member_kind, member_for_append);
-        let deserialize_member = deserialize_field(member_kind, member_name.clone());
+        let deserialize_member = deserialize_field(member_kind, member.name.clone());
         append_members.push(append_member);
         deserialize_members.push(deserialize_member);
         ctor.push(RewriteNode::interpolate_patched(
             "$member_name$, ",
-            &[(String::from("member_name"), member_name)].into(),
+            &[(String::from("member_name"), member.name.clone())].into(),
         ));
     }
-    let event_data = EventData::Struct { members };
-    let append_members = RewriteNode::Modified(ModifiedNode { children: Some(append_members) });
-    let deserialize_members =
-        RewriteNode::Modified(ModifiedNode { children: Some(deserialize_members) });
-    let ctor = RewriteNode::Modified(ModifiedNode { children: Some(ctor) });
+    let append_members = RewriteNode::new_modified(append_members);
+    let deserialize_members = RewriteNode::new_modified(deserialize_members);
+    let ctor = RewriteNode::new_modified(ctor);
 
     // Add an implementation for `Event<StructName>`.
-    let struct_name = RewriteNode::new_trimmed(struct_ast.name(db).as_syntax_node());
     let event_impl = RewriteNode::interpolate_patched(
         indoc! {"
             impl $struct_name$IsEvent of starknet::Event<$struct_name$> {
@@ -106,6 +190,7 @@ pub fn handle_struct(db: &dyn SyntaxGroup, struct_ast: ast::ItemStruct) -> Plugi
         ]
         .into(),
     );
+<<<<<<< HEAD
 
     builder.add_modified(event_impl);
 
@@ -116,70 +201,63 @@ pub fn handle_struct(db: &dyn SyntaxGroup, struct_ast: ast::ItemStruct) -> Plugi
             patches: builder.patches,
             aux_data: Some(DynGeneratedFileAuxData::new(StarkNetEventAuxData { event_data })),
         }),
+||||||| parent of ea008485f... Using derivers for event trait.
+
+    builder.add_modified(event_impl);
+
+    PluginResult {
+        code: Some(PluginGeneratedFile {
+            name: "event_impl".into(),
+            content: builder.code,
+            patches: builder.patches,
+            aux_data: vec![DynGeneratedFileAuxData::new(StarkNetEventAuxData { event_data })],
+        }),
+=======
+    (
+        EventCode {
+            append_keys_and_data_body: append_members,
+            deserialize_body: RewriteNode::interpolate_patched(
+                indoc! {"
+                $deserialize_members$ 
+                        Option::Some($struct_name$ {$ctor$})"},
+                &[
+                    (String::from("append_members"), append_members),
+                    (String::from("deserialize_members"), deserialize_members),
+                    (String::from("ctor"), ctor),
+                ]
+                .into(),
+            ),
+            additional_impls: RewriteNode::Text("".to_string()),
+        },
+>>>>>>> ea008485f... Using derivers for event trait.
         diagnostics,
-        remove_original_item: false,
-    }
+    )
 }
 
-/// Retrieves the field kind for a given struct member,
+/// Retrieves the field kind for a given struct member or enum variant,
 /// indicating how the field should be serialized.
 /// See [EventFieldKind].
 fn get_field_kind_for_member(
-    db: &dyn SyntaxGroup,
     diagnostics: &mut Vec<PluginDiagnostic>,
-    member: &ast::Member,
+    attrs: &[structured::Attribute],
     default: EventFieldKind,
 ) -> EventFieldKind {
-    let is_nested = member.has_attr(db, "nested");
-    let is_key = member.has_attr(db, "key");
-    let is_serde = member.has_attr(db, "serde");
+    let nested = attrs.iter().find(|attr| attr.id == "nested");
+    let is_key = attrs.iter().any(|attr| attr.id == "key");
+    let serde = attrs.iter().find(|attr| attr.id == "serde");
 
     // Currently, nested fields are unsupported.
-    if is_nested {
+    if let Some(nested) = nested {
         diagnostics.push(PluginDiagnostic {
             message: "Nested event fields are currently unsupported".to_string(),
-            stable_ptr: member.stable_ptr().untyped(),
+            stable_ptr: nested.stable_ptr.untyped(),
         });
     }
     // Currently, serde fields are unsupported.
-    if is_serde {
+    if let Some(serde) = serde {
         diagnostics.push(PluginDiagnostic {
             message: "Serde event fields are currently unsupported".to_string(),
-            stable_ptr: member.stable_ptr().untyped(),
-        });
-    }
-
-    if is_key {
-        return EventFieldKind::KeySerde;
-    }
-    default
-}
-
-/// Retrieves the field kind for a given enum variant,
-/// indicating how the field should be serialized.
-/// See [EventFieldKind].
-fn get_field_kind_for_variant(
-    db: &dyn SyntaxGroup,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-    variant: &ast::Variant,
-    default: EventFieldKind,
-) -> EventFieldKind {
-    let is_nested = variant.has_attr(db, "nested");
-    let is_key = variant.has_attr(db, "key");
-    let is_serde = variant.has_attr(db, "serde");
-
-    // Currently, nested fields are unsupported.
-    if is_nested {
-        diagnostics.push(PluginDiagnostic {
-            message: "Nested event fields are currently unsupported".to_string(),
-            stable_ptr: variant.stable_ptr().untyped(),
-        });
-    }
-    // Currently, serde fields are unsupported.
-    if is_serde {
-        diagnostics.push(PluginDiagnostic {
-            message: "Serde event fields are currently unsupported".to_string(),
-            stable_ptr: variant.stable_ptr().untyped(),
+            stable_ptr: serde.stable_ptr.untyped(),
         });
     }
 
@@ -190,38 +268,23 @@ fn get_field_kind_for_variant(
 }
 
 /// Derive the `Event` trait for enums annotated with `derive(starknet::Event)`.
-pub fn handle_enum(db: &dyn SyntaxGroup, enum_ast: ast::ItemEnum) -> PluginResult {
-    let mut builder = PatchBuilder::new(db);
+fn enum_event_info(
+    info: &DeriveInfo,
+    variants: &[MemberInfo],
+) -> (EventCode, Vec<PluginDiagnostic>) {
     let mut diagnostics = vec![];
-    let enum_name = RewriteNode::new_trimmed(enum_ast.name(db).as_syntax_node());
-
-    // TODO(spapini): Support generics.
-    let generic_params = enum_ast.generic_params(db);
-    let OptionWrappedGenericParamList::Empty(_) = generic_params else {
-        diagnostics.push(PluginDiagnostic {
-            message: "Event enums with generic arguments are unsupported".to_string(),
-            stable_ptr: generic_params.stable_ptr().untyped(),
-        });
-        return PluginResult { code: None, diagnostics, remove_original_item: false };
-    };
 
     let mut append_variants = vec![];
     let mut deserialize_variants = vec![];
-    let mut variants = vec![];
     let mut event_into_impls = vec![];
-    for variant in enum_ast.variants(db).elements(db) {
-        let ty = match variant.type_clause(db) {
-            ast::OptionTypeClause::Empty(_) => RewriteNode::Text("()".to_string()),
-            ast::OptionTypeClause::TypeClause(tc) => {
-                RewriteNode::new_trimmed(tc.ty(db).as_syntax_node())
-            }
-        };
-        let variant_name = RewriteNode::new_trimmed(variant.name(db).as_syntax_node());
-        let name = variant.name(db).text(db);
-        let variant_selector = format!("0x{:x}", starknet_keccak(name.as_bytes()));
-        let member_kind =
-            get_field_kind_for_variant(db, &mut diagnostics, &variant, EventFieldKind::Nested);
-        variants.push((name, member_kind));
+    for variant in variants {
+        let variant_selector =
+            format!("0x{:x}", starknet_keccak(variant.name.get_text(db).as_bytes()));
+        let member_kind = get_field_kind_for_member(
+            &mut diagnostics,
+            &variant.attributes,
+            EventFieldKind::Nested,
+        );
         let append_member = append_field(member_kind, RewriteNode::Text("val".into()));
         let append_variant = RewriteNode::interpolate_patched(
             "
@@ -307,6 +370,7 @@ pub fn handle_enum(db: &dyn SyntaxGroup, enum_ast: ast::ItemEnum) -> PluginResul
     );
 
     builder.add_modified(event_impl);
+<<<<<<< HEAD
 
     PluginResult {
         code: Some(PluginGeneratedFile {
@@ -315,9 +379,25 @@ pub fn handle_enum(db: &dyn SyntaxGroup, enum_ast: ast::ItemEnum) -> PluginResul
             patches: builder.patches,
             aux_data: Some(DynGeneratedFileAuxData::new(StarkNetEventAuxData { event_data })),
         }),
+||||||| parent of ea008485f... Using derivers for event trait.
+
+    PluginResult {
+        code: Some(PluginGeneratedFile {
+            name: "event_impl".into(),
+            content: builder.code,
+            patches: builder.patches,
+            aux_data: vec![DynGeneratedFileAuxData::new(StarkNetEventAuxData { event_data })],
+        }),
+=======
+    (
+        EventCode {
+            append_keys_and_data_body: todo!(),
+            deserialize_body: todo!(),
+            additional_impls: todo!(),
+        },
+>>>>>>> ea008485f... Using derivers for event trait.
         diagnostics,
-        remove_original_item: false,
-    }
+    )
 }
 
 /// Returns true if the type should be derived as an event.

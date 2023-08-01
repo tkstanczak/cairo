@@ -4,13 +4,12 @@ use cairo_lang_defs::plugin::{
 };
 use cairo_lang_filesystem::span::{TextOffset, TextSpan, TextWidth};
 use cairo_lang_syntax::attribute::structured::{
-    AttributeArg, AttributeArgVariant, AttributeStructurize,
+    self, AttributeArg, AttributeArgVariant, AttributeListStructurize,
 };
 use cairo_lang_syntax::node::ast::{
     AttributeList, MemberList, OptionWrappedGenericParamList, VariantList,
 };
 use cairo_lang_syntax::node::db::SyntaxGroup;
-use cairo_lang_syntax::node::helpers::QueryAttrs;
 use cairo_lang_syntax::node::{ast, SyntaxNode, TypedSyntaxNode};
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 use indoc::indoc;
@@ -58,9 +57,7 @@ impl DerivePlugin {
         let mut diagnostics = vec![];
         let mut builder = PatchBuilder::new(db);
         let mut aux_data = vec![];
-        for attr in info.attributes.query_attr(db, "derive") {
-            let attr = attr.structurize(db);
-
+        for attr in info.attributes.iter().filter(|attr| attr.id == "derive") {
             if attr.args.is_empty() {
                 diagnostics.push(PluginDiagnostic {
                     stable_ptr: attr.args_stable_ptr.untyped(),
@@ -69,7 +66,7 @@ impl DerivePlugin {
                 continue;
             }
 
-            for arg in attr.args {
+            for arg in &attr.args {
                 let AttributeArg {
                     variant: AttributeArgVariant::Unnamed { value: ast::Expr::Path(path), .. },
                     ..
@@ -176,7 +173,7 @@ impl MacroPlugin for DerivePlugin {
 pub struct MemberInfo {
     pub name: RewriteNode,
     pub ty: RewriteNode,
-    pub attributes: AttributeList,
+    pub attributes: Vec<structured::Attribute>,
 }
 
 /// Information on the type being derived.
@@ -280,7 +277,7 @@ fn add_with_seperator(
 /// Information for the type being derived.
 pub struct DeriveInfo {
     pub name: RewriteNode,
-    pub attributes: AttributeList,
+    pub attributes: Vec<structured::Attribute>,
     pub generics: GenericParamsInfo,
     pub specific_info: TypeVariantInfo,
 }
@@ -295,7 +292,7 @@ impl DeriveInfo {
     ) -> Self {
         Self {
             name: RewriteNode::new_trimmed(ident.as_syntax_node()),
-            attributes,
+            attributes: attributes.structurize(db),
             generics: GenericParamsInfo::new(db, generic_args),
             specific_info,
         }
@@ -349,7 +346,7 @@ fn extract_members(db: &dyn SyntaxGroup, members: MemberList) -> Vec<MemberInfo>
         .map(|member| MemberInfo {
             name: RewriteNode::new_trimmed(member.name(db).as_syntax_node()),
             ty: RewriteNode::new_trimmed(member.type_clause(db).ty(db).as_syntax_node()),
-            attributes: member.attributes(db),
+            attributes: member.attributes(db).structurize(db),
         })
         .collect()
 }
@@ -367,7 +364,7 @@ fn extract_variants(db: &dyn SyntaxGroup, variants: VariantList) -> Vec<MemberIn
                     RewriteNode::new_trimmed(t.ty(db).as_syntax_node())
                 }
             },
-            attributes: variant.attributes(db),
+            attributes: variant.attributes(db).structurize(db),
         })
         .collect()
 }
